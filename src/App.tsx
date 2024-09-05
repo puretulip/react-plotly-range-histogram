@@ -9,12 +9,17 @@ interface Metadata {
 }
 
 interface ScatterMetadata {
-  [key: string]: number[];  // [number, number] 대신 number[]를 사용
+  [key: string]: number[];
 }
 
 function App() {
   const [barData, setBarData] = useState<{x: number[], y: number[]}>({x: [], y: []});
-  const [scatterPlotData, setScatterPlotData] = useState<{x: number[], y: number[]}>({x: [], y: []});
+  const [scatterPlotData, setScatterPlotData] = useState<{
+    x: number[],
+    y: number[],
+    colors: string[],
+    hoverTexts: string[]
+  }>({x: [], y: [], colors: [], hoverTexts: []});
   const [dataSummary, setDataSummary] = useState<string>('');
   const [colors, setColors] = useState<string[]>([]);
   const [hoverTexts, setHoverTexts] = useState<string[]>([]);
@@ -25,7 +30,6 @@ function App() {
     const metadata = trainMetadata.metadata as Metadata;
     const fileSizes = Object.values(metadata);
 
-    // Histogram data preparation
     const minSize = Math.min(...fileSizes);
     const maxSize = Math.max(...fileSizes);
     const binCount = 20;
@@ -34,9 +38,13 @@ function App() {
     const bins: number[] = Array.from({length: binCount}, (_, i) => minSize + i * binSize);
     const counts = new Array(binCount).fill(0);
 
-    fileSizes.forEach(size => {
+    // Create a map to store bin index for each file
+    const fileToBinMap = new Map<string, number>();
+
+    Object.entries(metadata).forEach(([key, size]) => {
       const binIndex = Math.min(Math.floor((size - minSize) / binSize), binCount - 1);
       counts[binIndex]++;
+      fileToBinMap.set(key, binIndex);
     });
 
     setBarData({x: bins, y: counts});
@@ -61,11 +69,21 @@ function App() {
     const scatterMetadata = scatterData.metadata as ScatterMetadata;
     const scatterX = [];
     const scatterY = [];
-    for (const value of Object.values(scatterMetadata)) {
+    const scatterColors = [];
+    const scatterHoverTexts = [];
+    for (const [key, value] of Object.entries(scatterMetadata)) {
       scatterX.push(value[0]);
       scatterY.push(value[1]);
+      const binIndex = fileToBinMap.get(key) || 0;
+      scatterColors.push(newColors[binIndex]);
+      scatterHoverTexts.push(`Key: ${key}<br>X: ${value[0]}<br>Y: ${value[1].toFixed(4)}`);
     }
-    setScatterPlotData({x: scatterX, y: scatterY});
+    setScatterPlotData({
+      x: scatterX,
+      y: scatterY,
+      colors: scatterColors,
+      hoverTexts: scatterHoverTexts
+    });
   }, []);
 
   const togglePlotType = () => {
@@ -93,12 +111,14 @@ function App() {
               : {
                   x: scatterPlotData.x,
                   y: scatterPlotData.y,
-                  type: 'scattergl',  // 'scatter' 대신 'scattergl' 사용
+                  type: 'scattergl',
                   mode: 'markers',
                   marker: {
-                    color: 'rgba(75, 192, 192, 0.7)',
-                    size: 5,  // 마커 크기를 작게 설정
+                    color: scatterPlotData.colors,
+                    size: 5,
                   },
+                  hoverinfo: 'text',
+                  hovertext: scatterPlotData.hoverTexts,
                 }
           ]}
           layout={{
@@ -114,11 +134,11 @@ function App() {
               title: isHistogram ? 'Frequency' : 'Random Value',
             },
             bargap: 0.1,
-            hovermode: 'closest',  // 가장 가까운 점에 대한 호버 정보 표시
+            hovermode: 'closest',
           }}
           config={{
             responsive: true,
-            scrollZoom: true,  // 스크롤로 줌 가능하게 설정
+            scrollZoom: true,
           }}
         />
       </header>
