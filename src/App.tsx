@@ -8,32 +8,49 @@ interface Metadata {
 }
 
 function App() {
-  const [fileSizes, setFileSizes] = useState<number[]>([]);
+  const [barData, setBarData] = useState<{x: number[], y: number[]}>({x: [], y: []});
   const [dataSummary, setDataSummary] = useState<string>('');
+  const [colors, setColors] = useState<string[]>([]);
+  const [hoverTexts, setHoverTexts] = useState<string[]>([]);
+  const [plotRange, setPlotRange] = useState<[number, number]>([0, 0]);
 
   useEffect(() => {
-    // JSON 파일에서 파일 크기 데이터 추출
     const metadata = trainMetadata.metadata as Metadata;
-    const extractedSizes = Object.values(metadata);
-    setFileSizes(extractedSizes);
+    const fileSizes = Object.values(metadata);
 
-    // 데이터 요약 정보 생성
-    const minSize = Math.min(...extractedSizes);
-    const maxSize = Math.max(...extractedSizes);
-    const avgSize = extractedSizes.reduce((a, b) => a + b, 0) / extractedSizes.length;
-    const summary = `Min: ${minSize}, Max: ${maxSize}, Avg: ${avgSize.toFixed(2)}, Count: ${extractedSizes.length}`;
+    const minSize = Math.min(...fileSizes);
+    const maxSize = Math.max(...fileSizes);
+    const binCount = 20;
+    const binSize = Math.ceil((maxSize - minSize + 1) / binCount);
+
+    const bins: number[] = Array.from({length: binCount}, (_, i) => minSize + i * binSize);
+    const counts = new Array(binCount).fill(0);
+
+    fileSizes.forEach(size => {
+      const binIndex = Math.min(Math.floor((size - minSize) / binSize), binCount - 1);
+      counts[binIndex]++;
+    });
+
+    setBarData({x: bins, y: counts});
+    setPlotRange([minSize, maxSize + binSize]);
+
+    // 각 빈에 대한 고유한 색상 생성
+    const newColors = Array.from({length: binCount}, (_, i) => 
+      `hsl(${(i * 360 / binCount) % 360}, 70%, 50%)`
+    );
+    setColors(newColors);
+
+    // 호버 텍스트 생성
+    const newHoverTexts = bins.map((start, i) => {
+      const end = i < binCount - 1 ? bins[i + 1] : maxSize + 1;
+      return `[${start.toFixed(2)}, ${end.toFixed(2)}) <br>Count: ${counts[i]}`;
+    });
+    setHoverTexts(newHoverTexts);
+
+    const avgSize = fileSizes.reduce((a, b) => a + b, 0) / fileSizes.length;
+    const summary = `Min: ${minSize}, Max: ${maxSize}, Avg: ${avgSize.toFixed(2)}, Count: ${fileSizes.length}`;
     setDataSummary(summary);
-
-    console.log('Data distribution:', extractedSizes.reduce((acc, size) => {
-      acc[size] = (acc[size] || 0) + 1;
-      return acc;
-    }, {} as {[key: number]: number}));
   }, []);
-
-  const minSize = Math.min(...fileSizes);
-  const maxSize = Math.max(...fileSizes);
-  const binCount = 30;
-  const binSize = (maxSize - minSize + 1) / binCount;
 
   return (
     <div className="App">
@@ -42,15 +59,12 @@ function App() {
         <Plot
           data={[
             {
-              x: fileSizes,
-              type: 'histogram',
-              marker: {color: 'rgba(75, 192, 192, 0.7)'},
-              xbins: {
-                start: minSize,
-                end: maxSize + binSize,  // 최대값을 포함하기 위해 binSize를 더함
-                size: binSize
-              },
-              autobinx: false,
+              x: barData.x,
+              y: barData.y,
+              type: 'bar',
+              marker: {color: colors},
+              hoverinfo: 'text',
+              hovertext: hoverTexts,
             },
           ]}
           layout={{
@@ -59,7 +73,8 @@ function App() {
             title: '',
             xaxis: {
               title: 'File Size',
-              range: [minSize, maxSize + binSize],  // x축 범위도 조정
+              tickformat: '.0f',
+              range: plotRange,
             },
             yaxis: {title: 'Frequency'},
             bargap: 0.1,
