@@ -4,6 +4,10 @@ import './App.css';
 import trainMetadata from './data/train_metadata.json';
 import scatterData from './data/scatter_data.json';
 
+// Plotly의 Datum 타입을 import합니다. 
+// 만약 이 import가 작동하지 않는다면, any를 사용할 수 있습니다.
+import { Datum } from 'plotly.js';
+
 interface Metadata {
   [key: string]: number | string | Date | boolean;
 }
@@ -15,6 +19,11 @@ interface ScatterMetadata {
 type BinningType = 'enum' | 'range';
 type RangeType = 'auto' | 'manual';
 
+interface ScatterDataPoint {
+  x: number | string | boolean;
+  y: number;
+}
+
 function App() {
   const [metadata, setMetadata] = useState<Metadata>({});
   const [scatterMetadata, setScatterMetadata] = useState<ScatterMetadata>({});
@@ -23,7 +32,11 @@ function App() {
   const [rangeType, setRangeType] = useState<RangeType>('auto');
   const [manualBinCount, setManualBinCount] = useState<number>(20);
   const [barData, setBarData] = useState<{x: (number | string)[], y: number[]}>({x: [], y: []});
-  const [scatterPlotData, setScatterPlotData] = useState<{x: number[], y: number[], colors: string[]}>({x: [], y: [], colors: []});
+  const [scatterPlotData, setScatterPlotData] = useState<{
+    x: Datum[],
+    y: number[],
+    colors: string[]
+  }>({x: [], y: [], colors: []});
   const [colors, setColors] = useState<string[]>([]);
   const [hoverTexts, setHoverTexts] = useState<string[]>([]);
   const [plotRange, setPlotRange] = useState<[number, number]>([0, 0]);
@@ -123,35 +136,50 @@ function App() {
   };
 
   const generateScatterPlotData = (colorMap: Map<string | number, string>) => {
-    const scatterX = [];
-    const scatterY = [];
-    const scatterColors = [];
+    const scatterData: ScatterDataPoint[] = [];
+    const scatterColors: string[] = [];
 
     for (const [key, value] of Object.entries(scatterMetadata)) {
-      const x = value[0];  // x 좌표
-      const y = value[1];  // y 좌표
-      scatterX.push(x);
-      scatterY.push(y);
+      const x: number | string | boolean = value[0];  // x 좌표
+      const y: number = value[1];  // y 좌표
+      scatterData.push({ x, y });
 
-      let color;
+      let color: string;
       if (binningType === 'enum') {
-        // For enum, convert x to string and find the closest match
+        // For enum, find an exact match or the first occurrence in colorMap
         const xString = String(x);
-        const closestKey = Array.from(colorMap.keys()).reduce((prev, curr) => 
-          Math.abs(Number(curr) - Number(xString)) < Math.abs(Number(prev) - Number(xString)) ? curr : prev
-        );
-        color = colorMap.get(closestKey) || 'gray';
+        const matchingKey = Array.from(colorMap.keys()).find(key => String(key) === xString) 
+                            || Array.from(colorMap.keys())[0];
+        color = colorMap.get(matchingKey) || 'gray';
       } else {
-        // For range, find the appropriate bin (this part remains unchanged)
-        const binStart = Array.from(colorMap.keys()).reduce((prev, curr) => 
-          (Number(curr) <= x && Number(curr) > Number(prev)) ? curr : prev
-        );
-        color = colorMap.get(binStart) || 'gray';
+        // For range, find the appropriate bin
+        if (typeof x === 'number') {
+          const binStart = Array.from(colorMap.keys()).reduce((prev, curr) => 
+            (Number(curr) <= x && Number(curr) > Number(prev)) ? curr : prev
+          );
+          color = colorMap.get(binStart) || 'gray';
+        } else if (typeof x === 'string' && !isNaN(Date.parse(x))) {
+          // Treat x as a date string
+          const xTime = new Date(x).getTime();
+          const binStart = Array.from(colorMap.keys()).reduce((prev, curr) => {
+            const prevTime = typeof prev === 'string' ? new Date(prev).getTime() : Number(prev);
+            const currTime = typeof curr === 'string' ? new Date(curr).getTime() : Number(curr);
+            return (currTime <= xTime && currTime > prevTime) ? curr : prev;
+          });
+          color = colorMap.get(binStart) || 'gray';
+        } else {
+          // For non-numeric and non-date types in range mode, use a default color
+          color = 'gray';
+        }
       }
       scatterColors.push(color);
     }
 
-    setScatterPlotData({x: scatterX, y: scatterY, colors: scatterColors});
+    setScatterPlotData({
+      x: scatterData.map(d => d.x as Datum),  // x를 Datum으로 타입 단언
+      y: scatterData.map(d => d.y),
+      colors: scatterColors
+    });
   };
 
   return (
