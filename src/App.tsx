@@ -9,21 +9,36 @@ interface Metadata {
 
 function App() {
   const [fileSizes, setFileSizes] = useState<number[]>([]);
+  const [dataSummary, setDataSummary] = useState<string>('');
 
   useEffect(() => {
     // JSON 파일에서 파일 크기 데이터 추출
     const metadata = trainMetadata.metadata as Metadata;
     const extractedSizes = Object.values(metadata);
     setFileSizes(extractedSizes);
+
+    // 데이터 요약 정보 생성
+    const minSize = Math.min(...extractedSizes);
+    const maxSize = Math.max(...extractedSizes);
+    const avgSize = extractedSizes.reduce((a, b) => a + b, 0) / extractedSizes.length;
+    const summary = `Min: ${minSize}, Max: ${maxSize}, Avg: ${avgSize.toFixed(2)}, Count: ${extractedSizes.length}`;
+    setDataSummary(summary);
+
+    console.log('Data distribution:', extractedSizes.reduce((acc, size) => {
+      acc[size] = (acc[size] || 0) + 1;
+      return acc;
+    }, {} as {[key: number]: number}));
   }, []);
 
   const minSize = Math.min(...fileSizes);
   const maxSize = Math.max(...fileSizes);
+  const binCount = 30;
+  const binSize = (maxSize - minSize + 1) / binCount;
 
   return (
     <div className="App">
       <header className="App-header">
-        <h1>MNIST File Size Distribution</h1>
+        <p>{dataSummary}</p>
         <Plot
           data={[
             {
@@ -31,19 +46,20 @@ function App() {
               type: 'histogram',
               marker: {color: 'rgba(75, 192, 192, 0.7)'},
               xbins: {
-                start: minSize - 0.5,
-                end: maxSize + 0.5,
-                size: 1
+                start: minSize,
+                end: maxSize + binSize,  // 최대값을 포함하기 위해 binSize를 더함
+                size: binSize
               },
+              autobinx: false,
             },
           ]}
           layout={{
-            width: 720,
-            height: 480,
-            title: 'MNIST File Size Histogram',
+            width: 1000,
+            height: 600,
+            title: '',
             xaxis: {
               title: 'File Size',
-              showticklabels: false, // x축 눈금 레이블 숨기기
+              range: [minSize, maxSize + binSize],  // x축 범위도 조정
             },
             yaxis: {title: 'Frequency'},
             bargap: 0.1,
