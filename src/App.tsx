@@ -72,6 +72,15 @@ function App() {
     setColors(newColors);
     generateHoverTexts(x, y);
 
+    const minValue = x[x.length - 1];  // 가장 적게 등장하는 값
+    const maxValue = x[0];  // 가장 많이 등장하는 값
+    const totalCount = y.reduce((a, b) => a + b, 0);
+    const binCount = x.length;
+    const avgValue = (totalCount / binCount).toFixed(2);  // 평균 등장 횟수
+    const sumOfBinCounts = y.reduce((a, b) => a + b, 0);  // 각 bin의 count 합
+
+    setDataSummary(`Min: ${minValue}, Max: ${maxValue}, Avg: ${avgValue}, Count: ${totalCount}, Bin Count: ${binCount}, Sum of Bin Counts: ${sumOfBinCounts}`);
+
     const newValueToColorMap = new Map<string | number, string>();
     x.forEach((value, index) => {
       newValueToColorMap.set(value, newColors[index]);
@@ -107,7 +116,9 @@ function App() {
     generateHoverTexts(bins, counts);
 
     const avgValue = values.reduce((a, b) => a + b, 0) / values.length;
-    setDataSummary(`Min: ${minValue}, Max: ${maxValue}, Avg: ${avgValue.toFixed(2)}, Count: ${values.length}`);
+    const sumOfBinCounts = counts.reduce((a, b) => a + b, 0);  // 각 bin의 count 합
+
+    setDataSummary(`Min: ${minValue.toFixed(2)}, Max: ${maxValue.toFixed(2)}, Avg: ${avgValue.toFixed(2)}, Count: ${values.length}, Bin Count: ${binCount}, Sum of Bin Counts: ${sumOfBinCounts}`);
 
     const newValueToColorMap = new Map<string | number, string>();
     bins.forEach((binStart, index) => {
