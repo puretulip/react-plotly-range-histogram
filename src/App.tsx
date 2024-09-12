@@ -42,6 +42,7 @@ function App() {
   const [plotRange, setPlotRange] = useState<[number, number]>([0, 0]);
   const [dataSummary, setDataSummary] = useState<string>('');
   const [valueToColorMap, setValueToColorMap] = useState<Map<string | number, string>>(new Map());
+  const [avgCount, setAvgCount] = useState<number | null>(null);
 
   useEffect(() => {
     setMetadata(trainMetadata.metadata as Metadata);
@@ -50,14 +51,16 @@ function App() {
 
   const generateHistogram = () => {
     if (binningType === 'enum') {
-      generateEnumHistogram();
+      const avgCount = generateEnumHistogram();
+      setAvgCount(avgCount);
     } else {
-      generateRangeHistogram();
+      const avgCount = generateRangeHistogram();
+      setAvgCount(avgCount);
     }
   };
 
   const generateEnumHistogram = () => {
-    const counts: {[key: string]: number} = {};
+    const counts: { [key: string]: number } = {};
     Object.values(metadata).forEach(value => {
       const key = String(value);
       counts[key] = (counts[key] || 0) + 1;
@@ -67,7 +70,7 @@ function App() {
     const x = sortedCounts.map(([key]) => key);
     const y = sortedCounts.map(([, count]) => count);
 
-    setBarData({x, y});
+    setBarData({ x, y });
     const newColors = generateColors(x.length);
     setColors(newColors);
     generateHoverTexts(x, y);
@@ -76,10 +79,10 @@ function App() {
     const maxValue = x[0];  // 가장 많이 등장하는 값
     const totalCount = y.reduce((a, b) => a + b, 0);
     const binCount = x.length;
-    const avgValue = (totalCount / binCount).toFixed(2);  // 평균 등장 횟수
+    const avgCount = totalCount / binCount;  // y축 count의 평균
     const sumOfBinCounts = y.reduce((a, b) => a + b, 0);  // 각 bin의 count 합
 
-    setDataSummary(`Min: ${minValue}, Max: ${maxValue}, Avg: ${avgValue}, Count: ${totalCount}, Bin Count: ${binCount}, Sum of Bin Counts: ${sumOfBinCounts}`);
+    setDataSummary(`Min: ${minValue}, Max: ${maxValue}, Avg Count: ${avgCount.toFixed(2)}, Count: ${totalCount}, Bin Count: ${binCount}, Sum of Bin Counts: ${sumOfBinCounts}`);
 
     const newValueToColorMap = new Map<string | number, string>();
     x.forEach((value, index) => {
@@ -88,6 +91,8 @@ function App() {
     setValueToColorMap(newValueToColorMap);
 
     generateScatterPlotData(newValueToColorMap);
+
+    return avgCount; // 평균 count 값을 반환
   };
 
   const generateRangeHistogram = () => {
@@ -101,7 +106,7 @@ function App() {
     }
 
     const binSize = (maxValue - minValue) / binCount;
-    const bins = Array.from({length: binCount}, (_, i) => minValue + i * binSize);
+    const bins = Array.from({ length: binCount }, (_, i) => minValue + i * binSize);
     const counts = new Array(binCount).fill(0);
 
     values.forEach(value => {
@@ -109,16 +114,17 @@ function App() {
       counts[binIndex]++;
     });
 
-    setBarData({x: bins, y: counts});
+    setBarData({ x: bins, y: counts });
     setPlotRange([minValue, maxValue + binSize]);
     const newColors = generateColors(binCount);
     setColors(newColors);
     generateHoverTexts(bins, counts);
 
-    const avgValue = values.reduce((a, b) => a + b, 0) / values.length;
+    const totalCount = counts.reduce((a, b) => a + b, 0);
+    const avgCount = totalCount / binCount;  // y축 count의 평균
     const sumOfBinCounts = counts.reduce((a, b) => a + b, 0);  // 각 bin의 count 합
 
-    setDataSummary(`Min: ${minValue.toFixed(2)}, Max: ${maxValue.toFixed(2)}, Avg: ${avgValue.toFixed(2)}, Count: ${values.length}, Bin Count: ${binCount}, Sum of Bin Counts: ${sumOfBinCounts}`);
+    setDataSummary(`Min: ${minValue.toFixed(2)}, Max: ${maxValue.toFixed(2)}, Avg Count: ${avgCount.toFixed(2)}, Count: ${values.length}, Bin Count: ${binCount}, Sum of Bin Counts: ${sumOfBinCounts}`);
 
     const newValueToColorMap = new Map<string | number, string>();
     bins.forEach((binStart, index) => {
@@ -127,6 +133,8 @@ function App() {
     setValueToColorMap(newValueToColorMap);
 
     generateScatterPlotData(newValueToColorMap);
+
+    return avgCount; // 평균 count 값을 반환
   };
 
   const generateColors = (count: number) => {
@@ -248,6 +256,20 @@ function App() {
             },
             yaxis: {title: 'Frequency'},
             bargap: 0.1,
+            shapes: avgCount !== null ? [
+              {
+                type: 'line',
+                x0: Math.min(...barData.x as number[]), // x축의 시작
+                x1: Math.max(...barData.x as number[]), // x축의 끝
+                y0: avgCount, // 평균 count
+                y1: avgCount,
+                line: {
+                  color: 'red',
+                  width: 2,
+                  dash: 'dash', // 대시 선
+                },
+              },
+            ] : [],
           }}
         />
         <Plot
