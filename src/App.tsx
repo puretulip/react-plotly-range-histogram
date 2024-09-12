@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Plot from 'react-plotly.js';
 import './App.css';
-import trainMetadata from './data/train_metadata.json';
+import trainMetadata from './data/new_train_label_metadata.json';
 import scatterData from './data/scatter_data.json';
 
 // Plotly의 Datum 타입을 import합니다. 
@@ -9,7 +9,7 @@ import scatterData from './data/scatter_data.json';
 import { Datum } from 'plotly.js';
 
 interface Metadata {
-  [key: string]: number | string | Date | boolean;
+  [key: string]: number | string | Date | boolean | number[] | string[] | Date[] | boolean[];
 }
 
 interface ScatterMetadata {
@@ -61,9 +61,19 @@ function App() {
 
   const generateEnumHistogram = () => {
     const counts: { [key: string]: number } = {};
-    Object.values(metadata).forEach(value => {
-      const key = String(value);
-      counts[key] = (counts[key] || 0) + 1;
+
+    Object.entries(metadata).forEach(([key, value]) => {
+      if (Array.isArray(value)) {
+        // 값이 배열인 경우
+        value.forEach(item => {
+          const itemKey = String(item);
+          counts[itemKey] = (counts[itemKey] || 0) + 1; // 배열의 각 요소를 카운트
+        });
+      } else {
+        // 값이 단일 값인 경우
+        const itemKey = String(value);
+        counts[itemKey] = (counts[itemKey] || 0) + 1; // 단일 값을 카운트
+      }
     });
 
     const sortedCounts = Object.entries(counts).sort((a, b) => b[1] - a[1]);
@@ -83,6 +93,7 @@ function App() {
     const sumOfBinCounts = y.reduce((a, b) => a + b, 0);  // 각 bin의 count 합
 
     setDataSummary(`Min: ${minValue}, Max: ${maxValue}, Avg Count: ${avgCount.toFixed(2)}, Count: ${totalCount}, Bin Count: ${binCount}, Sum of Bin Counts: ${sumOfBinCounts}`);
+    setAvgCount(avgCount); // 평균 count 값을 상태에 저장
 
     const newValueToColorMap = new Map<string | number, string>();
     x.forEach((value, index) => {
@@ -96,7 +107,10 @@ function App() {
   };
 
   const generateRangeHistogram = () => {
-    const values = Object.values(metadata).map(Number);
+    const values = Object.values(metadata).flatMap(value => 
+      Array.isArray(value) ? value : [value] // 배열인 경우 내부 값을 펼치고, 단일 값인 경우 배열로 감싸기
+    ).map(Number); // 모든 값을 숫자로 변환
+
     const minValue = Math.min(...values);
     const maxValue = Math.max(...values);
 
@@ -125,6 +139,7 @@ function App() {
     const sumOfBinCounts = counts.reduce((a, b) => a + b, 0);  // 각 bin의 count 합
 
     setDataSummary(`Min: ${minValue.toFixed(2)}, Max: ${maxValue.toFixed(2)}, Avg Count: ${avgCount.toFixed(2)}, Count: ${values.length}, Bin Count: ${binCount}, Sum of Bin Counts: ${sumOfBinCounts}`);
+    setAvgCount(avgCount); // 평균 count 값을 상태에 저장
 
     const newValueToColorMap = new Map<string | number, string>();
     bins.forEach((binStart, index) => {
