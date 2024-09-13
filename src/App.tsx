@@ -42,6 +42,7 @@ function App() {
   const [plotRange, setPlotRange] = useState<[number, number]>([0, 0]);
   const [dataSummary, setDataSummary] = useState<string>('');
   const [valueToColorMap, setValueToColorMap] = useState<Map<string | number, string>>(new Map());
+  const [keyToColorMap, setKeyToColorMap] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
     setMetadata(trainMetadata.metadata as Metadata);
@@ -58,9 +59,9 @@ function App() {
 
   const generateEnumHistogram = () => {
     const counts: {[key: string]: number} = {};
-    Object.values(metadata).forEach(value => {
-      const key = String(value);
-      counts[key] = (counts[key] || 0) + 1;
+    Object.entries(metadata).forEach(([key, value]) => {
+      const valueKey = String(value);
+      counts[valueKey] = (counts[valueKey] || 0) + 1;
     });
 
     const sortedCounts = Object.entries(counts).sort((a, b) => b[1] - a[1]);
@@ -72,22 +73,26 @@ function App() {
     setColors(newColors);
     generateHoverTexts(x, y);
 
-    const minValue = x[x.length - 1];  // 가장 적게 등장하는 값
-    const maxValue = x[0];  // 가장 많이 등장하는 값
+    const minValue = x[x.length - 1];
+    const maxValue = x[0];
     const totalCount = y.reduce((a, b) => a + b, 0);
     const binCount = x.length;
-    const avgValue = (totalCount / binCount).toFixed(2);  // 평균 등장 횟수
-    const sumOfBinCounts = y.reduce((a, b) => a + b, 0);  // 각 bin의 count 합
+    const avgValue = (totalCount / binCount).toFixed(2);
+    const sumOfBinCounts = y.reduce((a, b) => a + b, 0);
 
     setDataSummary(`Min: ${minValue}, Max: ${maxValue}, Avg: ${avgValue}, Count: ${totalCount}, Bin Count: ${binCount}, Sum of Bin Counts: ${sumOfBinCounts}`);
 
-    const newValueToColorMap = new Map<string | number, string>();
-    x.forEach((value, index) => {
-      newValueToColorMap.set(value, newColors[index]);
+    const newKeyToColorMap = new Map<string, string>();
+    Object.keys(metadata).forEach(key => {
+      const value = String(metadata[key]);
+      const colorIndex = x.indexOf(value);
+      if (colorIndex !== -1) {
+        newKeyToColorMap.set(key, newColors[colorIndex]);
+      }
     });
-    setValueToColorMap(newValueToColorMap);
+    setKeyToColorMap(newKeyToColorMap);
 
-    generateScatterPlotData(newValueToColorMap);
+    generateScatterPlotData(newKeyToColorMap);
   };
 
   const generateRangeHistogram = () => {
@@ -104,8 +109,9 @@ function App() {
     const bins = Array.from({length: binCount}, (_, i) => minValue + i * binSize);
     const counts = new Array(binCount).fill(0);
 
-    values.forEach(value => {
-      const binIndex = Math.min(Math.floor((value - minValue) / binSize), binCount - 1);
+    Object.entries(metadata).forEach(([key, value]) => {
+      const numValue = Number(value);
+      const binIndex = Math.min(Math.floor((numValue - minValue) / binSize), binCount - 1);
       counts[binIndex]++;
     });
 
@@ -116,17 +122,19 @@ function App() {
     generateHoverTexts(bins, counts);
 
     const avgValue = values.reduce((a, b) => a + b, 0) / values.length;
-    const sumOfBinCounts = counts.reduce((a, b) => a + b, 0);  // 각 bin의 count 합
+    const sumOfBinCounts = counts.reduce((a, b) => a + b, 0);
 
     setDataSummary(`Min: ${minValue.toFixed(2)}, Max: ${maxValue.toFixed(2)}, Avg: ${avgValue.toFixed(2)}, Count: ${values.length}, Bin Count: ${binCount}, Sum of Bin Counts: ${sumOfBinCounts}`);
 
-    const newValueToColorMap = new Map<string | number, string>();
-    bins.forEach((binStart, index) => {
-      newValueToColorMap.set(binStart, newColors[index]);
+    const newKeyToColorMap = new Map<string, string>();
+    Object.entries(metadata).forEach(([key, value]) => {
+      const numValue = Number(value);
+      const binIndex = Math.min(Math.floor((numValue - minValue) / binSize), binCount - 1);
+      newKeyToColorMap.set(key, newColors[binIndex]);
     });
-    setValueToColorMap(newValueToColorMap);
+    setKeyToColorMap(newKeyToColorMap);
 
-    generateScatterPlotData(newValueToColorMap);
+    generateScatterPlotData(newKeyToColorMap);
   };
 
   const generateColors = (count: number) => {
@@ -146,7 +154,7 @@ function App() {
     setHoverTexts(newHoverTexts);
   };
 
-  const generateScatterPlotData = (colorMap: Map<string | number, string>) => {
+  const generateScatterPlotData = (colorMap: Map<string, string>) => {
     const scatterData: ScatterDataPoint[] = [];
     const scatterColors: string[] = [];
 
@@ -155,39 +163,12 @@ function App() {
       const y: number = value[1];  // y 좌표
       scatterData.push({ x, y });
 
-      let color: string;
-      if (binningType === 'enum') {
-        // For enum, find an exact match or the first occurrence in colorMap
-        const xString = String(x);
-        const matchingKey = Array.from(colorMap.keys()).find(key => String(key) === xString) 
-                            || Array.from(colorMap.keys())[0];
-        color = colorMap.get(matchingKey) || 'gray';
-      } else {
-        // For range, find the appropriate bin
-        if (typeof x === 'number') {
-          const binStart = Array.from(colorMap.keys()).reduce((prev, curr) => 
-            (Number(curr) <= x && Number(curr) > Number(prev)) ? curr : prev
-          );
-          color = colorMap.get(binStart) || 'gray';
-        } else if (typeof x === 'string' && !isNaN(Date.parse(x))) {
-          // Treat x as a date string
-          const xTime = new Date(x).getTime();
-          const binStart = Array.from(colorMap.keys()).reduce((prev, curr) => {
-            const prevTime = typeof prev === 'string' ? new Date(prev).getTime() : Number(prev);
-            const currTime = typeof curr === 'string' ? new Date(curr).getTime() : Number(curr);
-            return (currTime <= xTime && currTime > prevTime) ? curr : prev;
-          });
-          color = colorMap.get(binStart) || 'gray';
-        } else {
-          // For non-numeric and non-date types in range mode, use a default color
-          color = 'gray';
-        }
-      }
+      const color = colorMap.get(key) || 'gray';
       scatterColors.push(color);
     }
 
     setScatterPlotData({
-      x: scatterData.map(d => d.x as Datum),  // x를 Datum으로 타입 단언
+      x: scatterData.map(d => d.x as Datum),
       y: scatterData.map(d => d.y),
       colors: scatterColors
     });
