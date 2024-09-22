@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import Plot from 'react-plotly.js';
 import './App.css';
-import trainMetadata from './data/train_metadata.json';
-import scatterData from './data/scatter_data.json';
+import trainMetadata from './data/train_label_metadata.json';
+import scatterData from './data/scatter_data_random.json';
 
 // Plotly의 Datum 타입을 import합니다. 
 // 만약 이 import가 작동하지 않는다면, any를 사용할 수 있습니다.
@@ -20,8 +20,9 @@ type BinningType = 'enum' | 'range';
 type RangeType = 'auto' | 'manual';
 
 interface ScatterDataPoint {
-  x: number | string | boolean;
+  x: number;
   y: number;
+  key: string; // 데이터 포인트의 키 추가
 }
 
 function App() {
@@ -43,6 +44,7 @@ function App() {
   const [dataSummary, setDataSummary] = useState<string>('');
   const [valueToColorMap, setValueToColorMap] = useState<Map<string | number, string>>(new Map());
   const [keyToColorMap, setKeyToColorMap] = useState<Map<string, string>>(new Map());
+  const [scatterHoverTexts, setScatterHoverTexts] = useState<string[]>([]);
 
   useEffect(() => {
     setMetadata(trainMetadata.metadata as Metadata);
@@ -157,14 +159,19 @@ function App() {
   const generateScatterPlotData = (colorMap: Map<string, string>) => {
     const scatterData: ScatterDataPoint[] = [];
     const scatterColors: string[] = [];
+    const hoverTexts: string[] = [];
 
     for (const [key, value] of Object.entries(scatterMetadata)) {
-      const x: number | string | boolean = value[0];  // x 좌표
+      const x: number = Math.random();  // 0부터 1까지의 랜덤 값 생성
       const y: number = value[1];  // y 좌표
-      scatterData.push({ x, y });
+      scatterData.push({ x, y, key });
 
       const color = colorMap.get(key) || 'gray';
       scatterColors.push(color);
+
+      // Histogram의 legend 값을 hover text로 사용
+      const legendValue = metadata[key];
+      hoverTexts.push(`Key: ${key}<br>Value: ${legendValue}<br>X: ${x.toFixed(2)}, Y: ${y}`);
     }
 
     setScatterPlotData({
@@ -172,6 +179,7 @@ function App() {
       y: scatterData.map(d => d.y),
       colors: scatterColors
     });
+    setScatterHoverTexts(hoverTexts);
   };
 
   return (
@@ -236,21 +244,17 @@ function App() {
             {
               x: scatterPlotData.x,
               y: scatterPlotData.y,
-              type: 'scattergl',
               mode: 'markers',
-              marker: {
-                color: scatterPlotData.colors,
-                size: 5,
-                opacity: 0.7,
-              },
+              type: 'scattergl',
+              marker: { color: scatterPlotData.colors },
+              hoverinfo: 'text',
+              hovertext: scatterHoverTexts,
             }
           ]}
           layout={{
-            width: 1000,
-            height: 600,
-            title: 'Scatter Plot',
-            xaxis: {title: 'X'},
-            yaxis: {title: 'Y'},
+            width: 500,
+            height: 500,
+            title: 'Scatter Plot'
           }}
         />
       </header>
