@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Plot from 'react-plotly.js';
+import { Data } from 'plotly.js';  // 이 줄을 추가해주세요
 import './App.css';
 import trainMetadata from './data/train_label_metadata.json';
 import scatterData from './data/scatter_data_random.json';
@@ -34,17 +35,18 @@ function App() {
   const [manualBinCount, setManualBinCount] = useState<number>(20);
   const [barData, setBarData] = useState<{x: (number | string)[], y: number[]}>({x: [], y: []});
   const [scatterPlotData, setScatterPlotData] = useState<{
-    x: Datum[],
-    y: number[],
-    colors: string[]
-  }>({x: [], y: [], colors: []});
+    [key: string]: ScatterDataPoint[]
+  }>({});
   const [colors, setColors] = useState<string[]>([]);
   const [hoverTexts, setHoverTexts] = useState<string[]>([]);
   const [plotRange, setPlotRange] = useState<[number, number]>([0, 0]);
   const [dataSummary, setDataSummary] = useState<string>('');
   const [valueToColorMap, setValueToColorMap] = useState<Map<string | number, string>>(new Map());
   const [keyToColorMap, setKeyToColorMap] = useState<Map<string, string>>(new Map());
-  const [scatterHoverTexts, setScatterHoverTexts] = useState<string[]>([]);
+  const [scatterColors, setScatterColors] = useState<{ [key: string]: string }>({});
+  const [scatterHoverTexts, setScatterHoverTexts] = useState<{ [key: string]: string[] }>({});
+  const [scatterLegend, setScatterLegend] = useState<{name: string, color: string}[]>([]);
+  const [legendLabels, setLegendLabels] = useState<string[]>([]);
 
   useEffect(() => {
     setMetadata(trainMetadata.metadata as Metadata);
@@ -94,7 +96,14 @@ function App() {
     });
     setKeyToColorMap(newKeyToColorMap);
 
-    generateScatterPlotData(newKeyToColorMap);
+    const newScatterLegend = x.map((value, index) => ({
+      name: value,
+      color: newColors[index]
+    }));
+    setScatterLegend(newScatterLegend);
+
+    setLegendLabels(x);
+    generateScatterPlotData(newKeyToColorMap, x);
   };
 
   const generateRangeHistogram = () => {
@@ -136,7 +145,11 @@ function App() {
     });
     setKeyToColorMap(newKeyToColorMap);
 
-    generateScatterPlotData(newKeyToColorMap);
+    const labels = bins.map((bin, index) => 
+      `${bin.toFixed(2)} - ${(bin + binSize).toFixed(2)}`
+    );
+    setLegendLabels(labels);
+    generateScatterPlotData(newKeyToColorMap, labels);
   };
 
   const generateColors = (count: number) => {
@@ -156,29 +169,40 @@ function App() {
     setHoverTexts(newHoverTexts);
   };
 
-  const generateScatterPlotData = (colorMap: Map<string, string>) => {
-    const scatterData: ScatterDataPoint[] = [];
-    const scatterColors: string[] = [];
-    const hoverTexts: string[] = [];
+  const generateScatterPlotData = (colorMap: Map<string, string>, labels: string[]) => {
+    const scatterData: { [key: string]: ScatterDataPoint[] } = {};
+    const scatterColors: { [key: string]: string } = {};
+    const hoverTexts: { [key: string]: string[] } = {};
 
     for (const [key, value] of Object.entries(scatterMetadata)) {
-      const x: number = Math.random();  // 0부터 1까지의 랜덤 값 생성
-      const y: number = value[1];  // y 좌표
-      scatterData.push({ x, y, key });
-
-      const color = colorMap.get(key) || 'gray';
-      scatterColors.push(color);
-
-      // Histogram의 legend 값을 hover text로 사용
-      const legendValue = metadata[key];
-      hoverTexts.push(`Key: ${key}<br>Value: ${legendValue}<br>X: ${x.toFixed(2)}, Y: ${y}`);
+      const x: number = Math.random();
+      const y: number = value[1];
+      let legendIndex: number;
+      
+      if (binningType === 'enum') {
+        legendIndex = labels.indexOf(String(metadata[key]));
+      } else {
+        const numValue = Number(metadata[key]);
+        legendIndex = labels.findIndex((label, index) => {
+          const [min, max] = label.split(' - ').map(Number);
+          return numValue >= min && (index === labels.length - 1 || numValue < max);
+        });
+      }
+      
+      const legendValue = labels[legendIndex];
+      
+      if (!scatterData[legendValue]) {
+        scatterData[legendValue] = [];
+        scatterColors[legendValue] = colorMap.get(key) || 'gray';
+        hoverTexts[legendValue] = [];
+      }
+      
+      scatterData[legendValue].push({ x, y, key });
+      hoverTexts[legendValue].push(`Key: ${key}<br>Value: ${metadata[key]}<br>X: ${x.toFixed(2)}, Y: ${y}`);
     }
 
-    setScatterPlotData({
-      x: scatterData.map(d => d.x as Datum),
-      y: scatterData.map(d => d.y),
-      colors: scatterColors
-    });
+    setScatterPlotData(scatterData);
+    setScatterColors(scatterColors);
     setScatterHoverTexts(hoverTexts);
   };
 
@@ -240,21 +264,22 @@ function App() {
           }}
         />
         <Plot
-          data={[
-            {
-              x: scatterPlotData.x,
-              y: scatterPlotData.y,
-              mode: 'markers',
-              type: 'scattergl',
-              marker: { color: scatterPlotData.colors },
-              hoverinfo: 'text',
-              hovertext: scatterHoverTexts,
-            }
-          ]}
+          data={Object.entries(scatterPlotData).map(([legendValue, points]) => ({
+            x: points.map(p => p.x),
+            y: points.map(p => p.y),
+            mode: 'markers' as const,
+            type: 'scattergl' as const,
+            marker: { color: scatterColors[legendValue] },
+            name: legendValue,
+            hoverinfo: 'text' as const,
+            hovertext: scatterHoverTexts[legendValue],
+          } as Data))}
           layout={{
-            width: 500,
-            height: 500,
-            title: 'Scatter Plot'
+            width: 1000,
+            height: 1000,
+            title: 'Scatter Plot',
+            showlegend: true,
+            legend: { orientation: 'h', y: -0.2 }
           }}
         />
       </header>
